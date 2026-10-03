@@ -85,3 +85,77 @@ def test_stream_start_from_server_path_records_stream_sid(tmp_path):
     bridge.from_twilio({"event": "start", "start": {"streamSid": "MZ9"}})
     _, to_twilio = bridge.from_realtime({"type": "response.output_audio.delta", "delta": "CCC="})
     assert to_twilio and to_twilio[0]["streamSid"] == "MZ9"
+
+
+def _call(bridge, name):
+    to_realtime, _ = bridge.from_realtime({
+        "type": "response.function_call_arguments.done", "name": name,
+        "call_id": f"id-{name}", "arguments": "{}",
+    })
+    return json.loads(to_realtime[0]["item"]["output"])
+
+
+def test_retry_refused_before_account_check(tmp_path):
+    bridge, _ = make_bridge(tmp_path)
+    assert "error" in _call(bridge, "retry_autopay_charge")
+
+
+def test_payment_link_refused_before_account_check(tmp_path):
+    bridge, _ = make_bridge(tmp_path)
+    assert "error" in _call(bridge, "send_payment_link")
+
+
+def test_actions_allowed_after_account_check(tmp_path):
+    bridge, _ = make_bridge(tmp_path)
+    assert "error" not in _call(bridge, "check_payment_status")
+    assert "error" not in _call(bridge, "send_payment_link")
+
+
+def test_check_is_per_call_not_shared(tmp_path):
+    bridge_a, _ = make_bridge(tmp_path, customer_id="cust_001")
+    bridge_b, _ = make_bridge(tmp_path, customer_id="cust_002")
+    _call(bridge_a, "check_payment_status")
+    assert "error" in _call(bridge_b, "send_payment_link")
+
+
+def test_signature_round_trip_and_tamper_detection():
+    from backend.security import is_valid_twilio_request, twilio_signature
+    params = [("CallSid", "CA1"), ("From", "+12792363632")]
+    sig = twilio_signature("https://example.test/voice/twiml?customer_id=cust_001", params, "tok")
+    assert is_valid_twilio_request("https://example.test/voice/twiml?customer_id=cust_001", params, sig, "tok")
+    assert not is_valid_twilio_request("https://example.test/voice/twiml?customer_id=cust_002", params, sig, "tok")
+    assert not is_valid_twilio_request("https://example.test/voice/twiml?customer_id=cust_001", params, sig, "other")
+
+
+def test_twiml_rejects_unsigned_request(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    import backend.app as app_module
+    monkeypatch.setenv("TWILIO_AUTH_TOKEN", "secret-token")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://example.test")
+    client = TestClient(app_module.app)
+    resp = client.post("/voice/twiml?customer_id=cust_001", content=b"CallSid=CA1")
+    assert resp.status_code == 403
+
+
+def test_twiml_accepts_correctly_signed_request(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    import backend.app as app_module
+    from backend.security import twilio_signature
+    monkeypatch.setenv("TWILIO_AUTH_TOKEN", "secret-token")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://example.test")
+    body = "CallSid=CA1&From=%2B12792363632"
+    sig = twilio_signature("https://example.test/voice/twiml?customer_id=cust_001",
+                           [("CallSid", "CA1"), ("From", "+12792363632")], "secret-token")
+    client = TestClient(app_module.app)
+    resp = client.post("/voice/twiml?customer_id=cust_001", content=body,
+                       headers={"content-type": "application/x-www-form-urlencoded", "X-Twilio-Signature": sig})
+    assert resp.status_code == 200
+    assert "wss://example.test/voice/media" in resp.text
+
+
+def test_twiml_fails_closed_without_token(monkeypatch):
+    from fastapi.testclient import TestClient
+    import backend.app as app_module
+    monkeypatch.delenv("TWILIO_AUTH_TOKEN", raising=False)
+    client = TestClient(app_module.app)
+    assert client.post("/voice/twiml?customer_id=cust_001", content=b"x=1", headers={"X-Twilio-Signature": "abc"}).status_code == 403

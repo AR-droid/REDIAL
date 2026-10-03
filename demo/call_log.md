@@ -12,7 +12,7 @@ All calls below are real outbound Twilio calls to the approved phone, answered o
 | 4 | Vikram Shah | Inform only (paused autopay) | check | Pass |
 | 5 | Fatima Sheikh | Offer retry, then link | check | Pass (user declined both) |
 | 6 | Arjun Rao | No collection (dispute) | check | Pass |
-| 7 | Divya Pillai | Time request: reminder link | send link only | Partial: check not called first |
+| 7 | Divya Pillai | Time request: reminder link | send link only | Partial: check not called first. Gate added in code after the call; not re-tested on a phone. |
 | 8 | Karan Malhotra | No answer | none | Pass (re-run, unanswered) |
 | 9 | Sneha Reddy | Stop on amount dispute, escalate | check | Pass |
 | 10 | Imran Qureshi | Link only (fraud flag) | check, send link | Pass (flag for review not possible) |

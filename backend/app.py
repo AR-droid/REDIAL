@@ -65,20 +65,32 @@ async def tool_webhook(request: Request) -> JSONResponse:
 
 import asyncio
 import os
+from urllib.parse import parse_qsl
 
 from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
 import websockets
 
+from backend.security import is_valid_twilio_request
 from backend.voice import REALTIME_URL, CallBridge, twiml_connect
 
 
 @app.post("/voice/twiml")
 async def voice_twiml(request: Request, customer_id: str) -> Response:
+    # Only Twilio may start a call session. The signed URL is the public one Twilio requested.
+    body = (await request.body()).decode()
+    params = parse_qsl(body, keep_blank_values=True)
+    public_url = f"{os.environ.get('PUBLIC_BASE_URL', '').rstrip('/')}/voice/twiml"
+    if request.url.query:
+        public_url += f"?{request.url.query}"
+    if not is_valid_twilio_request(public_url, params, request.headers.get("x-twilio-signature"),
+                                   os.environ.get("TWILIO_AUTH_TOKEN")):
+        return Response(status_code=403)
     if _tools.store.get(customer_id) is None:
         return Response(status_code=404)
-    host = request.headers.get("x-forwarded-host") or request.url.netloc
-    stream_url = f"wss://{host}/voice/media"
+    stream_url = f"wss://{request.url.netloc}/voice/media"
+    if os.environ.get("PUBLIC_BASE_URL"):
+        stream_url = os.environ["PUBLIC_BASE_URL"].rstrip("/").replace("https://", "wss://", 1) + "/voice/media"
     return Response(content=twiml_connect(stream_url, customer_id), media_type="application/xml")
 
 

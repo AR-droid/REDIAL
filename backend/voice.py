@@ -77,6 +77,8 @@ class CallBridge:
         self.tools = tools
         self.customer_id = customer_id
         self.stream_sid: str | None = None
+        # The prompt requires the account check before anything else. Enforced here, per call.
+        self.account_checked = False
 
     def opening_messages(self) -> list[dict]:
         return [session_update(self.customer_id), {"type": "response.create", "response": {"instructions": OPENING_LINE}}]
@@ -106,7 +108,7 @@ class CallBridge:
             to_twilio.append({"event": "clear", "streamSid": self.stream_sid})
 
         elif kind == "response.function_call_arguments.done":
-            output = self._run_tool(event["name"], event.get("arguments", "{}"))
+            output = self.run_tool(event["name"], event.get("arguments", "{}"))
             to_realtime.append({"type": "conversation.item.create",
                                 "item": {"type": "function_call_output", "call_id": event["call_id"], "output": output}})
             to_realtime.append({"type": "response.create"})
@@ -116,14 +118,18 @@ class CallBridge:
 
         return to_realtime, to_twilio
 
-    def _run_tool(self, name: str, arguments: str) -> str:
+    def run_tool(self, name: str, arguments: str) -> str:
         allowed = {t["name"] for t in TOOL_SCHEMAS}
         try:
             if name not in allowed:
                 raise ToolError(f"unknown tool: {name}")
+            if name != "check_payment_status" and not self.account_checked:
+                raise ToolError("check_payment_status must be called before this action")
             json.loads(arguments or "{}")  # reject malformed arguments
             # The customer is fixed for this call. Ignore any other ID the model supplies.
             output = getattr(self.tools, name)(self.customer_id)
+            if name == "check_payment_status":
+                self.account_checked = True
             return json.dumps(output)
         except (ToolError, ValueError) as exc:
             return json.dumps({"error": str(exc)})

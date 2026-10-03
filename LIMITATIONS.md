@@ -18,7 +18,7 @@
 
 ## Known defects
 
-- **Scenario 7 status check:** the agent sent a link without calling `check_payment_status` first, although the prompt requires it. Cause not yet found. The prompt has not been changed for this.
+- **Scenario 7 status check:** the agent sent a link without calling `check_payment_status` first, although the prompt requires it. Fixed in code after the call: the backend now refuses retry and payment-link calls until the account check has run on that call. This fix is covered by offline tests but has not been re-run on a live call.
 - **Scenario 9 handoff:** the agent offered a transfer that doesn't exist (see above).
 - **Scenario 1 wording:** the first recorded call told the user the payment "went through," which was wrong for a mock retry. The wording was changed afterward. No transcript was saved, so the wording is recorded from the user's report.
 - **Early calls without audio:** the first attempts did not produce agent speech. One was a missing streamSid, which is fixed and covered by a test. The other attempts that ended after about 14 seconds likely had an unconfirmed trial key press. The call log records both.
@@ -27,7 +27,7 @@
 
 These are needed before any real customer is contacted:
 
-- **Webhook authentication:** `/voice/twiml` and `/voice/media` do not verify Twilio's request signature. Anyone who knows the URL can start a call session. `/tools` has no authentication either.
+- **Webhook authentication:** `/voice/twiml` now verifies Twilio's request signature and returns 403 otherwise. The signature check has been tested offline, but not yet against a live Twilio request. `/voice/media` is a WebSocket that Twilio does not sign, so it is not authenticated; anyone who knows its URL and sends a valid start message can open a session. `/tools`, the older Vapi webhook, has no authentication.
 - **Secrets:** API keys and tokens were pasted into the development chat during this project. They should be rotated before the repo is shared.
 - **Audit storage:** the audit log is a local JSONL file. It isn't durable, isn't tamper-evident, and isn't shared across processes.
 - **Persistence:** account state is in memory and resets when the backend restarts.
@@ -44,7 +44,6 @@ These are needed before any real customer is contacted:
 ## Long-term fixes
 
 - Replace `retry_autopay_charge` and `send_payment_link` with real payment-processor calls behind the same tool interface.
-- Add Twilio signature validation and authentication on `/tools`.
+- Authenticate `/voice/media` and `/tools`, for example with a per-call token issued at TwiML time.
 - Add a real warm transfer to a human agent, and a tool that flags accounts.
 - Persist customer state and audit logs in a database.
-- Add a check in code that the prompt's required first step (`check_payment_status`) ran before any other tool.

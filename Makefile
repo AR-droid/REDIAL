@@ -8,7 +8,7 @@ setup:
 
 # Backend: tool webhooks (/tools) and the phone-call bridge (/voice/*). Expose with ngrok for calls.
 mock-server:
-	.venv/bin/uvicorn backend.app:app --port $(PORT)
+	set -a; . ./.env; set +a; .venv/bin/uvicorn backend.app:app --port $(PORT)
 
 test:
 	.venv/bin/pytest

@@ -14,9 +14,10 @@ from pathlib import Path
 
 import httpx
 
-from backend.audit import AuditLog
 from backend.store import CustomerStore
-from backend.tools import Tools, ToolError
+from backend.audit import AuditLog
+from backend.voice import CallBridge
+from backend.tools import Tools
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = json.loads((ROOT / "agent/assistant_config.json").read_text())
@@ -72,20 +73,12 @@ def chat(api_key: str, messages: list[dict]) -> dict:
     return r.json()["choices"][0]["message"]
 
 
-def run_tool(tools: Tools, name: str, arguments: str) -> str:
-    try:
-        args = json.loads(arguments or "{}")
-        output = getattr(tools, name)(args["customer_id"])
-        return json.dumps(output)
-    except (ToolError, KeyError, AttributeError) as exc:
-        return json.dumps({"error": str(exc)})
-
-
 def simulate(api_key: str, customer_id: str) -> dict:
     audit = AuditLog(OUT_DIR / f"{customer_id}_audit.jsonl")
     if audit.path.exists():
         audit.path.unlink()
-    tools = Tools(CustomerStore(), audit)
+    # Same bridge the phone calls use, so the check-first gate applies here too.
+    bridge = CallBridge(Tools(CustomerStore(), audit), customer_id)
     messages = [{"role": "system", "content": system_prompt(customer_id)}]
     transcript = []
     tool_calls = []
@@ -101,7 +94,7 @@ def simulate(api_key: str, customer_id: str) -> dict:
                 break
             for call in msg["tool_calls"]:
                 name = call["function"]["name"]
-                result = run_tool(tools, name, call["function"]["arguments"])
+                result = bridge.run_tool(name, call["function"]["arguments"])
                 tool_calls.append({"tool": name, "arguments": call["function"]["arguments"], "result": result})
                 transcript.append(("Tool", f"{name} -> {result}"))
                 messages.append({"role": "tool", "tool_call_id": call["id"], "content": result})
