@@ -1,0 +1,65 @@
+{
+  "name": "Redial (autopay recovery)",
+  "firstMessageMode": "assistant-speaks-first",
+  "firstMessage": "Hi, this is a call about a payment that did not go through on your account. Is now a good time to talk?",
+  "model": {
+    "provider": "openai",
+    "model": "gpt-4o",
+    "temperature": 0.3,
+    "messages": [
+      {
+        "role": "system",
+        "content": "__SYSTEM_PROMPT_FROM_agent/system_prompt.md__"
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "check_payment_status",
+          "description": "Returns the failed autopay charge details for a customer. Call this first on every call.",
+          "parameters": {
+            "type": "object",
+            "properties": { "customer_id": { "type": "string" } },
+            "required": ["customer_id"]
+          }
+        },
+        "server": { "url": "__BACKEND_URL__/tools" }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "retry_autopay_charge",
+          "description": "Retries the failed autopay charge for this customer.",
+          "parameters": {
+            "type": "object",
+            "properties": { "customer_id": { "type": "string" } },
+            "required": ["customer_id"]
+          }
+        },
+        "server": { "url": "__BACKEND_URL__/tools" }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "send_payment_link",
+          "description": "Sends a payment link to this customer.",
+          "parameters": {
+            "type": "object",
+            "properties": { "customer_id": { "type": "string" } },
+            "required": ["customer_id"]
+          }
+        },
+        "server": { "url": "__BACKEND_URL__/tools" }
+      }
+    ]
+  },
+  "voice": {
+    "provider": "vapi",
+    "voiceId": "Elliot"
+  },
+  "endCallFunctionEnabled": true,
+  "endCallMessage": "Thanks for your time, have a good day.",
+  "maxDurationSeconds": 300,
+  "backgroundSound": "off"
+}

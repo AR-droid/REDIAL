@@ -1,0 +1,2 @@
+{"ts": "2026-10-03T18:17:27.621646+00:00", "tool": "check_payment_status", "customer_id": "cust_001", "mocked": true, "result": {"amount_due": 1249.0, "currency": "INR", "due_date": "2026-09-28", "failure_reason": "insufficient_funds", "autopay_status": "active", "is_disputing": false, "retry_count": 0}}
+{"ts": "2026-10-03T18:17:30.762302+00:00", "tool": "retry_autopay_charge", "customer_id": "cust_001", "mocked": true, "result": {"status": "succeeded"}}
