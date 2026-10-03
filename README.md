@@ -77,7 +77,6 @@ See [demo/call_log.md](demo/call_log.md) for the summary table and the per-scena
 - [CAPABILITIES.md](CAPABILITIES.md): what the agent can and cannot do
 - [LIMITATIONS.md](LIMITATIONS.md): what is mocked, what is missing, and known issues
 - [demo/scenarios.md](demo/scenarios.md): the ten scenarios and expected outcomes
-- [demo/baseline.md](demo/baseline.md): human-agent comparison (not measured)
 - [demo/call_log.md](demo/call_log.md): real call results
 - [PROJECT_BRIEF.md](PROJECT_BRIEF.md): the original build brief
 
@@ -87,7 +86,7 @@ See [demo/call_log.md](demo/call_log.md) for the summary table and the per-scena
 agent/        system prompt, assistant config (Vapi attempt, see LIMITATIONS)
 backend/      FastAPI app, tools, audit log, voice bridge, customer store
 data/         customers.json (10 fictional records)
-demo/         scenarios, call log, baseline, audit log, simulation transcripts
+demo/         scenarios, call log, audit log, simulation transcripts
 scripts/      place_voice_call.py, simulate.py
 tests/        offline tests
 ```
