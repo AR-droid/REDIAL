@@ -9,6 +9,7 @@ Usage: .venv/bin/python scripts/simulate.py <customer_id> [<customer_id> ...]
 import json
 import os
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,11 +17,10 @@ import httpx
 
 from backend.store import CustomerStore
 from backend.audit import AuditLog
-from backend.voice import CallBridge
+from backend.voice import TOOL_SCHEMAS, CallBridge
 from backend.tools import Tools
 
 ROOT = Path(__file__).resolve().parent.parent
-CONFIG = json.loads((ROOT / "agent/assistant_config.json").read_text())
 PROMPT_TEMPLATE = (ROOT / "agent/system_prompt.md").read_text()
 OUT_DIR = ROOT / "demo" / "simulations"
 MODEL = "gpt-4o"
@@ -43,19 +43,31 @@ SCRIPTS = {
         "Actually, I'm disputing an earlier charge on my account, and I don't want to pay this one.",
         "Okay, bye.",
     ],
+    "cust_009": [
+        "Hi, this is Sneha. Yes, I can talk. What is this about?",
+        "That's not what I agreed to. The amount is wrong.",
+        "Okay, bye.",
+    ],
+    "cust_010": [
+        "Hi, this is Imran. Yes, go ahead.",
+        "Can you just retry the charge on my card?",
+        "Okay, send me the link then.",
+    ],
 }
 
 # What the policy requires for each scenario, per brief section 5/6.
 EXPECTED = {
     "cust_001": {"retry_autopay_charge": True, "send_payment_link": False},
     "cust_003": {"retry_autopay_charge": False, "send_payment_link": True},
-    "cust_006": {"retry_autopay_charge": False, "send_payment_link": False},
+    "cust_006": {"retry_autopay_charge": False, "send_payment_link": False, "escalate_to_human": True},
+    "cust_009": {"retry_autopay_charge": False, "send_payment_link": False, "escalate_to_human": True},
+    "cust_010": {"retry_autopay_charge": False, "send_payment_link": True},
 }
 
 
 def openai_tools() -> list[dict]:
-    # Same function schemas as agent/assistant_config.json, without Vapi's server field.
-    return [{"type": "function", "function": t["function"]} for t in CONFIG["model"]["tools"]]
+    # Same tool definitions the phone calls use (backend/voice.py).
+    return [{"type": "function", "function": t} for t in TOOL_SCHEMAS]
 
 
 def system_prompt(customer_id: str) -> str:
@@ -63,14 +75,20 @@ def system_prompt(customer_id: str) -> str:
 
 
 def chat(api_key: str, messages: list[dict]) -> dict:
-    r = httpx.post(
-        "https://api.openai.com/v1/chat/completions",
-        headers={"Authorization": f"Bearer {api_key}"},
-        json={"model": MODEL, "temperature": 0.3, "messages": messages, "tools": openai_tools()},
-        timeout=120,
-    )
+    # Retry on rate limits (HTTP 429) with backoff; any other error is raised immediately.
+    for attempt in range(6):
+        r = httpx.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}"},
+            json={"model": MODEL, "temperature": 0.3, "messages": messages, "tools": openai_tools()},
+            timeout=120,
+        )
+        if r.status_code != 429:
+            r.raise_for_status()
+            return r.json()["choices"][0]["message"]
+        time.sleep(10 * (attempt + 1))
     r.raise_for_status()
-    return r.json()["choices"][0]["message"]
+    raise RuntimeError("rate limited after retries")
 
 
 def simulate(api_key: str, customer_id: str) -> dict:

@@ -1,0 +1,2 @@
+{"ts": "2026-10-03T19:17:10.111653+00:00", "tool": "check_payment_status", "customer_id": "cust_010", "mocked": true, "result": {"amount_due": 5600.0, "currency": "INR", "due_date": "2026-09-30", "failure_reason": "bank_declined_fraud_flag", "autopay_status": "active", "is_disputing": false, "retry_count": 0}}
+{"ts": "2026-10-03T19:17:13.117287+00:00", "tool": "send_payment_link", "customer_id": "cust_010", "mocked": true, "result": {"status": "sent", "link": "https://pay.example.com/link/cust_010"}}

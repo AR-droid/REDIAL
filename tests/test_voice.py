@@ -21,13 +21,14 @@ def test_session_declares_mulaw_both_directions_and_three_tools():
     update = session_update("cust_001")["session"]
     assert update["audio"]["input"]["format"]["type"] == "audio/pcmu"
     assert update["audio"]["output"]["format"]["type"] == "audio/pcmu"
-    assert {t["name"] for t in update["tools"]} == {"check_payment_status", "retry_autopay_charge", "send_payment_link"}
+    assert {t["name"] for t in update["tools"]} == {"check_payment_status", "retry_autopay_charge", "send_payment_link", "escalate_to_human"}
 
 
 def test_twiml_connects_stream_with_customer_parameter():
-    xml = twiml_connect("wss://example.test/voice/media", "cust_003")
+    xml = twiml_connect("wss://example.test/voice/media", "cust_003", "1700000000.abc")
     assert '<Stream url="wss://example.test/voice/media">' in xml
     assert 'name="customer_id" value="cust_003"' in xml
+    assert 'name="token" value="1700000000.abc"' in xml
 
 
 def test_twilio_start_sets_stream_and_media_is_forwarded(tmp_path):

@@ -1,0 +1,26 @@
+# Archived: Vapi tool webhook from the abandoned Vapi design. Not imported or served.
+# Kept for reference only.
+
+@app.post("/tools")
+async def tool_webhook(request: Request) -> JSONResponse:
+    body = await request.json()
+    message = body.get("message", {})
+    if message.get("type") != "tool-calls":
+        return JSONResponse({})
+
+    results = []
+    for call in message.get("toolCallList", []):
+        call_id = call.get("id")
+        fn = call.get("function", {})
+        try:
+            output = _run_tool(fn.get("name", ""), _parse_arguments(fn.get("arguments")))
+            results.append({"toolCallId": call_id, "result": json.dumps(output)})
+        except (ToolError, ValueError) as exc:
+            # Tool-level failures still return HTTP 200 so Vapi can read the error and continue.
+            results.append({"toolCallId": call_id, "error": str(exc)})
+        except Exception:
+            log.exception("unexpected error in tool %s", fn.get("name"))
+            results.append({"toolCallId": call_id, "error": "internal tool error"})
+    return JSONResponse({"results": results})
+
+

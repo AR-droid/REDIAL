@@ -6,7 +6,7 @@
 - **Payment link domain:** `pay.example.com`, a placeholder.
 - **Account data:** `data/customers.json` is ten fictional records. Nothing is read from a real customer database.
 - **Account flags:** the policy's "flag for human review" step has no tool, so it cannot be recorded.
-- **Human handoff:** the agent offers to connect the customer to a person, but no transfer exists.
+- **Human escalation is mocked.** `escalate_to_human` writes an audit entry with `status: escalation_requested`. No human team exists to receive it, and nothing is transferred. The phone calls for scenarios 6, 9 and 10 happened before this tool existed, so their live results show no escalation entry.
 
 ## Platform and setup
 
@@ -19,7 +19,7 @@
 ## Known defects
 
 - **Scenario 7 status check:** the agent sent a link without calling `check_payment_status` first, although the prompt requires it. Fixed in code after the call: the backend now refuses retry and payment-link calls until the account check has run on that call. This fix is covered by offline tests but has not been re-run on a live call.
-- **Scenario 9 handoff:** the agent offered a transfer that doesn't exist (see above).
+- **Scenario 9 handoff:** the agent offered to connect the caller to a person on the live call. That offer had no matching tool at the time (see the mocked escalation above).
 - **Scenario 1 wording:** the first recorded call told the user the payment "went through," which was wrong for a mock retry. The wording was changed afterward. No transcript was saved, so the wording is recorded from the user's report.
 - **Early calls without audio:** the first attempts did not produce agent speech. One was a missing streamSid, which is fixed and covered by a test. The other attempts that ended after about 14 seconds likely had an unconfirmed trial key press. The call log records both.
 
@@ -27,7 +27,7 @@
 
 These are needed before any real customer is contacted:
 
-- **Webhook authentication:** `/voice/twiml` now verifies Twilio's request signature and returns 403 otherwise. The signature check has been tested offline, but not yet against a live Twilio request. `/voice/media` is a WebSocket that Twilio does not sign, so it is not authenticated; anyone who knows its URL and sends a valid start message can open a session. `/tools`, the older Vapi webhook, has no authentication.
+- **Webhook authentication:** `/voice/twiml` verifies Twilio's request signature and returns 403 otherwise. `/voice/media` requires a per-call token that the signed TwiML carries; the token expires after 10 minutes and is checked before the OpenAI session opens. Both checks are tested offline. The media-token path is not yet re-run on a live call, because the first retry after adding it exposed a bug (Twilio sends `connected` before `start`), which is now fixed and tested offline. The old Vapi `/tools` webhook is archived and no longer served.
 - **Secrets:** API keys and tokens were pasted into the development chat during this project. They should be rotated before the repo is shared.
 - **Audit storage:** the audit log is a local JSONL file. It isn't durable, isn't tamper-evident, and isn't shared across processes.
 - **Persistence:** account state is in memory and resets when the backend restarts.
@@ -44,6 +44,6 @@ These are needed before any real customer is contacted:
 ## Long-term fixes
 
 - Replace `retry_autopay_charge` and `send_payment_link` with real payment-processor calls behind the same tool interface.
-- Authenticate `/voice/media` and `/tools`, for example with a per-call token issued at TwiML time.
+- Move call state and tokens to a shared store, so they survive restarts and work across more than one server.
 - Add a real warm transfer to a human agent, and a tool that flags accounts.
 - Persist customer state and audit logs in a database.

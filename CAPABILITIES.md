@@ -16,7 +16,7 @@
 ## The agent cannot
 
 - Move money, charge a card, or send a real payment link or message. Those tools are mocked.
-- Transfer a call to a person. It can say it will, but no transfer exists.
+- Transfer a call to a person. Escalation is mocked: `escalate_to_human` records a request in the audit log, because no human team exists to receive one.
 - Flag an account for human review. The policy asks for this in one scenario, but no tool records it.
 - Call any number other than the approved one. The script refuses other destinations, and Twilio trial rules also apply.
 - Take inbound calls.

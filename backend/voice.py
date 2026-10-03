@@ -37,6 +37,16 @@ TOOL_SCHEMAS = [
         "description": "Sends a payment link to this customer.",
         "parameters": {"type": "object", "properties": {"customer_id": {"type": "string"}}, "required": ["customer_id"]},
     },
+    {
+        "type": "function",
+        "name": "escalate_to_human",
+        "description": "Records a request for a human agent to take over. Use when the customer disputes the charge or the amount, or asks for a person.",
+        "parameters": {
+            "type": "object",
+            "properties": {"reason": {"type": "string", "enum": ["customer_dispute", "amount_dispute", "customer_request"]}},
+            "required": ["reason"],
+        },
+    },
 ]
 
 
@@ -44,12 +54,13 @@ def system_prompt(customer_id: str) -> str:
     return PROMPT_TEMPLATE.replace("{{customer_id}}", customer_id)
 
 
-def twiml_connect(stream_url: str, customer_id: str) -> str:
+def twiml_connect(stream_url: str, customer_id: str, token: str) -> str:
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
         "<Response><Connect>"
         f'<Stream url="{stream_url}">'
         f'<Parameter name="customer_id" value="{customer_id}"/>'
+        f'<Parameter name="token" value="{token}"/>'
         "</Stream></Connect></Response>"
     )
 
@@ -123,11 +134,15 @@ class CallBridge:
         try:
             if name not in allowed:
                 raise ToolError(f"unknown tool: {name}")
-            if name != "check_payment_status" and not self.account_checked:
+            # Escalation moves no money, so it is allowed before the account check.
+            if name not in ("check_payment_status", "escalate_to_human") and not self.account_checked:
                 raise ToolError("check_payment_status must be called before this action")
-            json.loads(arguments or "{}")  # reject malformed arguments
+            args = json.loads(arguments or "{}")  # reject malformed arguments
             # The customer is fixed for this call. Ignore any other ID the model supplies.
-            output = getattr(self.tools, name)(self.customer_id)
+            if name == "escalate_to_human":
+                output = self.tools.escalate_to_human(self.customer_id, args.get("reason", ""))
+            else:
+                output = getattr(self.tools, name)(self.customer_id)
             if name == "check_payment_status":
                 self.account_checked = True
             return json.dumps(output)

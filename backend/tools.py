@@ -4,6 +4,7 @@ from backend.audit import AuditLog
 from backend.store import CustomerStore
 
 PAYMENT_LINK_HOST = "https://pay.example.com/link"
+ESCALATION_REASONS = {"customer_dispute", "amount_dispute", "customer_request"}
 
 
 class ToolError(Exception):
@@ -50,4 +51,16 @@ class Tools:
             "link": f"{PAYMENT_LINK_HOST}/{customer_id}",
         }
         self.audit.record("send_payment_link", customer_id, result)
+        return result
+
+    def escalate_to_human(self, customer_id: str, reason: str) -> dict:
+        if reason not in ESCALATION_REASONS:
+            raise ToolError(f"reason must be one of {sorted(ESCALATION_REASONS)}")
+        self._customer(customer_id)
+        result = {
+            "status": "escalation_requested",
+            "reason": reason,
+            "message": "Request recorded for a human agent. No transfer was made.",
+        }
+        self.audit.record("escalate_to_human", customer_id, result, reason=reason)
         return result
